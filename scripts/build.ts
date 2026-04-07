@@ -116,26 +116,6 @@ export async function handleBgFlag() { throw new Error("Background sessions are 
           }),
         )
 
-        build.onResolve(
-          { filter: /^\.\.\/(daemon\/workerRegistry|daemon\/main|cli\/bg|cli\/handlers\/templateJobs|environment-runner\/main|self-hosted-runner\/main)\.js$/ },
-          args => {
-            if (!internalFeatureStubModules.has(args.path)) return null
-            return {
-              path: args.path,
-              namespace: 'internal-feature-stub',
-            }
-          },
-        )
-        build.onLoad(
-          { filter: /.*/, namespace: 'internal-feature-stub' },
-          args => ({
-            contents:
-              internalFeatureStubModules.get(args.path) ??
-              'export {}',
-            loader: 'js',
-          }),
-        )
-
         // Resolve react/compiler-runtime to the standalone package
         build.onResolve({ filter: /^react\/compiler-runtime$/ }, () => ({
           path: 'react/compiler-runtime',
@@ -150,6 +130,147 @@ export async function handleBgFlag() { throw new Error("Background sessions are 
         )
 
         // NOTE: @opentelemetry/* kept as external deps (too many named exports to stub)
+
+        const internalRemovedPaths = [
+          'daemon/workerRegistry.js',
+          'daemon/main.js',
+          'cli/bg.js',
+          'cli/handlers/templateJobs.js',
+          'environment-runner/main.js',
+          'self-hosted-runner/main.js',
+          'services/compact/cachedMCConfig.js',
+          'services/compact/snipProjection.js',
+          'services/compact/reactiveCompact.js',
+          'services/contextCollapse/persist.js',
+          'services/contextCollapse/operations.js',
+          'services/skillSearch/featureCheck.js',
+          'services/skillSearch/prefetch.js',
+          'services/skillSearch/localSearch.js',
+          'services/skillSearch/remoteSkillState.js',
+          'services/skillSearch/remoteSkillLoader.js',
+          'services/skillSearch/telemetry.js',
+          'services/sessionTranscript/sessionTranscript.js',
+          'sessionTranscript/sessionTranscript.js',
+          'proactive/index.js',
+          'proactive/useProactive.js',
+          'tools/DiscoverSkillsTool/prompt.js',
+          'SendUserFileTool/prompt.js',
+          'tools/SendUserFileTool/prompt.js',
+          'tools/SnipTool/prompt.js',
+          'tools/SnipTool/SnipTool.js',
+          'tools/SleepTool/SleepTool.js',
+          'tools/MonitorTool/MonitorTool.js',
+          'tools/SendUserFileTool/SendUserFileTool.js',
+          'tools/PushNotificationTool/PushNotificationTool.js',
+          'tools/SubscribePRTool/SubscribePRTool.js',
+          'tools/OverflowTestTool/OverflowTestTool.js',
+          'tools/CtxInspectTool/CtxInspectTool.js',
+          'tools/TerminalCaptureTool/TerminalCaptureTool.js',
+          'tools/TerminalCaptureTool/prompt.js',
+          'tools/WebBrowserTool/WebBrowserTool.js',
+          'tools/WebBrowserTool/WebBrowserPanel.js',
+          'tools/ListPeersTool/ListPeersTool.js',
+          'tools/WorkflowTool/bundled/index.js',
+          'tools/WorkflowTool/WorkflowTool.js',
+          'tools/WorkflowTool/createWorkflowCommand.js',
+          'tools/WorkflowTool/WorkflowPermissionRequest.js',
+          'tools/VerifyPlanExecutionTool/constants.js',
+          'tools/ReviewArtifactTool/ReviewArtifactTool.js',
+          'assistant/index.js',
+          'assistant/gate.js',
+          'assistant/sessionDiscovery.js',
+          'server/parseConnectUrl.js',
+          'ssh/createSSHSession.js',
+          'server/server.js',
+          'server/sessionManager.js',
+          'server/backends/dangerousBackend.js',
+          'server/serverBanner.js',
+          'server/serverLog.js',
+          'server/lockfile.js',
+          'server/connectHeadless.js',
+          'jobs/classifier.js',
+          'utils/taskSummary.js',
+          'utils/attributionHooks.js',
+          'utils/systemThemeWatcher.js',
+          'utils/udsMessaging.js',
+          'utils/udsClient.js',
+          'commands/proactive.js',
+          'commands/assistant/index.js',
+          'commands/remoteControlServer/index.js',
+          'commands/force-snip.js',
+          'commands/workflows/index.js',
+          'commands/subscribe-pr.js',
+          'commands/torch.js',
+          'commands/peers/index.js',
+          'commands/fork/index.js',
+          'attributionTrailer.js',
+          'skills/mcpSkills.js',
+          'coordinator/workerAgent.js',
+          'dream.js',
+          'hunter.js',
+          'runSkillGenerator.js',
+          'udsMessaging.js',
+          'bridge/peerSessions.js',
+          'memoryShapeTelemetry.js',
+          'memdir/memoryShapeTelemetry.js',
+          'skillSearch/localSearch.js',
+          'tasks/MonitorMcpTask/MonitorMcpTask.js',
+          'WorkflowDetailDialog.js',
+          'tasks/LocalWorkflowTask/LocalWorkflowTask.js',
+          'MonitorMcpDetailDialog.js',
+          'messages/SnipBoundaryMessage.js',
+          'ReviewArtifactPermissionRequest/ReviewArtifactPermissionRequest.js',
+          'MonitorPermissionRequest/MonitorPermissionRequest.js',
+          'UserGitHubWebhookMessage.js',
+          'UserForkBoilerplateMessage.js',
+          'UserCrossSessionMessage.js'
+        ];
+
+        const internalRemovedFilter = new RegExp('(' + internalRemovedPaths.map(p => p.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')).join('|') + ')$');
+
+        build.onResolve({ filter: internalRemovedFilter }, args => {
+          return {
+            path: args.path,
+            namespace: 'internal-feature-stub',
+          }
+        })
+
+        build.onLoad(
+          { filter: /.*/, namespace: 'internal-feature-stub' },
+          args => {
+            const content = internalFeatureStubModules.get(args.path)
+            if (content) return { contents: content, loader: 'js' }
+
+            // Generic stub for internal modules
+            return {
+              contents: `
+const noop = () => null;
+const ProxyStub = new Proxy(noop, { get: () => ProxyStub });
+export default ProxyStub;
+export const SleepTool = ProxyStub;
+export const MonitorTool = ProxyStub;
+export const SendUserFileTool = ProxyStub;
+export const SubscribePRTool = ProxyStub;
+export const OverflowTestTool = ProxyStub;
+export const CtxInspectTool = ProxyStub;
+export const WebBrowserTool = ProxyStub;
+export const SnipTool = ProxyStub;
+export const ListPeersTool = ProxyStub;
+export const WorkflowTool = ProxyStub;
+export const LocalWorkflowTask = ProxyStub;
+export const MonitorMcpTask = ProxyStub;
+export const ReviewArtifactTool = ProxyStub;
+export const initBundledWorkflows = noop;
+export const buildPRTrailers = noop;
+export const templatesMain = noop;
+export const daemonMain = noop;
+export const runDaemonWorker = noop;
+export const useProactive = noop;
+`,
+              loader: 'js',
+            }
+          },
+        )
 
         // Resolve native addon and missing snapshot imports to stubs
         for (const mod of [
